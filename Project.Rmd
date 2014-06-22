@@ -1,0 +1,88 @@
+---
+title: "Evaluating Exercise Form via Machine Learning"
+author: "Marcus Brown"
+date: "Saturday, June 21, 2014"
+output: html_document
+---
+### Synopsis
+Machine Learning is the process of using algorithms to learn from data. Perhaps the most important aspect of any machine learning problem is the rather human process of determing what we are trying to learn about.
+
+In the study we will discuss in this paper (http://groupware.les.inf.puc-rio.br/har), they investigated the use of computing to evaluate "proper" exercise form (possibly allowing computers to replace personal trainers to help us become [better, faster, stronger](https://www.youtube.com/watch?v=HoLs0V8T5AA).
+
+
+### The Data
+In the study referenced above, the data was obtained by attaching sensors (inertial measurement units) to both study participants, and weights, to measure the motion as exercises were performed. Each participant was instructed to perform an exercise five different ways (one "correct" way and differnt "incorrect" ways).
+
+In the final data set, available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv), each record consists of measuremnts obtained per person/exercise form in short span of time (0.5 - 2.5 seconds).
+```{r}
+if (!file.exists("./data/pml-testing.csv")){
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                  "./data/pml-testing.csv")
+    }
+```
+In this paper, we will use this data to create a prediction model to detect the variation of the exercise being performed based on collected data.
+
+### Data Processing
+First, we import the data and take an initial look at it:
+```{r}
+data = read.csv("./data/pml-training.csv", na.strings = c("NA", ""))
+dim(data)
+summary(data$classe)
+```
+There are 19622 records with 160 variables. The variable we will be predicting on is *classe*, and the data is split up between the five *classes*.
+
+Next, we will split the data into a **training** set to train the model on, and a **testing** set to test the performanace of the model:
+```{r}
+set.seed(0)
+library(caret)
+inTrain = createDataPartition(y=data$classe, p=0.7, list=FALSE)
+training = data[inTrain,]
+testing = data[-inTrain,]
+dim(training)
+```
+
+There are currently 159 variables available to use for training the model. Let's see if we can pare that number down some by removing variables with a lot of missing values.
+```{r}
+na_test = sapply(training, function(x) {sum(is.na(x))})
+table(na_test)
+```
+
+There are 100 columns with almost all missing values. We can remove these columns from our training data and take a look at the remaining columns.
+```{r}
+bad_columns = names(na_test[na_test==13460])
+training = training[, !names(training) %in% bad_columns]
+str(training)
+```
+
+In order to look only at the variables related to movement, we can also remove the first seven variables with have to do with the sequence and subject.
+```{r}
+training = training[,-c(1:7)]
+```
+
+### Model Builinding
+We will now create a model to predict the *classe* using a random forest on the remaining variables (this model took hours to run on my machine, so I saved the model once it was completed so I do not need to rerun the exact model in the future).
+```{r}
+library(caret)
+library(randomForest)
+```
+```{r eval=FALSE}
+model = train(classe~., method="rf", data=train1)
+saveRDS(model, "rfmodel.RDS")
+```
+```{r}
+model = readRDS("rfmodel.RDS")
+```
+
+### Model Evaluation
+Once we have trained the model on the **training** data, we can test the accuracy using the **testing** data we left out. Let's define accuracy as the percentage of correct predictions from the model (comparing the predictions from the model to the actual *classe* variable in the **testing** data).
+```{r}
+mean(predict(model, testing) == testing$classe) * 100
+```
+
+The model is 99.8% accurate on the training data.
+
+### Conclusion
+We have built a model to predict exercise form based on movement data. We estimate the out of sample error to be .2% (1 - **testing** accuracy). This is a promising result regarding the use of machine learning to detect bad exercise form. It must be notes that what we are truly predicting here is the which of 5 predetermined supervised movements a subject is performing. So, although we estimate a very low out of sample error, we can expect the error of predicting bad form in real life situations to be higher.
+
+#####tldr
+Don't fire your personal trainer... yet.
